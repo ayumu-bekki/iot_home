@@ -1,0 +1,77 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - type: bind
+        source: "./mosquitto/config"
+        target: "/mosquitto/config"
+    healthcheck:
+      test: "mosquitto_pub -h localhost -t test -m 'healthcheck' || exit 1"
+      interval: 5s
+      retries: 5
+      timeout: 3s
+    restart: always
+    networks:
+      - iot_network 
+
+  influxdb:
+    image: influxdb:2
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=password123
+      - DOCKER_INFLUXDB_INIT_ORG=iothomeorg
+      - DOCKER_INFLUXDB_INIT_BUCKET=iothomebucket
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=mytoken123456789
+    volumes:
+      - type: bind
+        source: "./influxdb/data"
+        target: "/var/lib/influxdb2"
+      - type: bind
+        source: "./influxdb/config"
+        target: "/etc/influxdb2"
+    healthcheck:
+      test: influx ping || exit 1
+      interval: 5s
+      retries: 4
+      timeout: 3s
+    restart: always
+    networks:
+      - iot_network 
+
+  grafana:
+    image: grafana/grafana:12.0.1
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - type: bind
+        source: "./grafana/data"
+        target: "/var/lib/grafana"
+    restart: always
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    networks:
+      - iot_network 
+
+  iot_controller:
+    build:
+      context: ./iot_controller
+    restart: always
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    networks:
+      - iot_network 
+
+networks:
+  iot_network:
+
